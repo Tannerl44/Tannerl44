@@ -1,0 +1,63 @@
+#This script is built to take output from a reformated .trm ForTheRecord file and combine into one video file. 
+#When reformating through FTR Manager choose the WMV format as video output. 
+
+# These store the working directory for use in paths later on. 
+$pwd = pwd
+$pwd2 = convert-path $pwd
+
+# Combines the current paths with the .wmv to be used in the search. 
+$concat = "$pwd\*.wmv"
+
+# The text file to write filenames to (does not have to exist first)
+$txtFile = "$pwd\tobecombined.txt"
+
+# Get filenames from current directory
+# Get-ChildItem is aliased by 'dir'
+$files = Get-ChildItem $pwd -Recurse -Include *.wmv;
+
+#looking for all .wmv files in working directory
+$filenames = Get-ChildItem $concat | select -expand fullname
+
+# Creates the name that will be used as the final file name.
+$newname = Split-Path -path "$pwd" -leaf
+
+#-------------------------------------------------------------------------------------------------------------------------
+
+# Checks which .wmv files exist and if one matches the $newname.wmv the script ends. Otherwise it starts the combining process
+if ($filenames -match "$newname.wmv")
+{"ALREADY EXISTS, Check for combined video."}
+else
+{
+
+# Starts logging so if video errors occur one can review and see the issue. 
+Start-Transcript -Path ffmpeg_Combiner_Script_log.log
+
+# Creates .txt document that will be used by ffmpeg for the concat function.
+New-Item -Path "$pwd\tobecombined.txt" -ItemType "File"
+
+# Loop through the files in the directory adding only .wmv files to the tobecombined.txt file.
+foreach($file in $files)
+{
+	Add-Content $txtFile $file.name;
+}
+
+# Takes tobecombined.txt and append text to read like "file 'path\*.txt'" outputs as new file then deletes older file.
+#FFMPEG concat function requires specific naming inside the .txt file to parse out what needs to be combined. see https://trac.ffmpeg.org/wiki/Concatenate#demuxer
+get-content "$pwd\tobecombined.txt" | foreach {"file '$pwd2\$_'"} | out-file -encoding ascii "$pwd\ffmpegcombined.txt"
+Remove-Item "$pwd\tobecombined.txt"
+
+# Runs ffmpeg concat to create combined video
+ffmpeg -f concat -safe 0 -i "$pwd2\ffmpegcombined.txt" -c copy FinalCombined.wmv
+
+# Cleans up directory by removing unnecessary document once FFMPEG has ran.
+Remove-Item "$pwd\ffmpegcombined.txt"
+
+# Renames combined video file to be named after last folder in working directory.
+Rename-Item -path "$pwd\FinalCombined.wmv" -NewName "$newname.wmv"
+
+# Stops the logging. 
+Stop-Transcript
+}
+
+Add-Type -AssemblyName Microsoft.VisualBasic
+[Microsoft.VisualBasic.Interaction]::MsgBox("Congrats $env:UserName ! Your videos have been combined, please check and make sure the video plays and the order of files is correct.",'OKOnly,SystemModal,Information', 'Successfully Completed')
